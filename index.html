@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>寒域觀測：台灣天氣數據微縮可視化系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ice: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#031b2e',
+                        },
+                        coldgray: {
+                            800: '#111827',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    },
+                    boxShadow: {
+                        'neon-blue': '0 0 15px rgba(56, 189, 248, 0.4)',
+                        'neon-glow': '0 0 25px rgba(186, 230, 253, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 冰霜毛玻璃自訂樣式 */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(186, 230, 253, 0.15);
+        }
+        .glass-panel-active {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+        }
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.8);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.3);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(56, 189, 248, 0.6);
+        }
+        /* 打字機效果動畫關鍵影格 */
+        @keyframes blink {
+            50% { border-color: transparent; }
+        }
+        .cursor-blink {
+            animation: blink 0.8s infinite;
+        }
+    </style>
+</head>
+<body class="bg-coldgray-950 text-ice-100 min-h-screen relative overflow-x-hidden font-sans selection:bg-ice-500 selection:text-white">
+
+    <!-- Canvas 雨天動畫背景 -->
+    <canvas id="rainCanvas" class="fixed top-0 left-0 w-full h-full pointer-events-none z-0"></canvas>
+
+    <!-- 頂部冰晶科技裝飾線 -->
+    <div class="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-ice-400 to-transparent z-50 shadow-neon-blue"></div>
+
+    <div class="relative z-10 min-h-screen flex flex-col justify-between">
+        
+        <!-- 導航列 -->
+        <header class="glass-panel sticky top-0 z-40 px-6 py-4 border-b border-ice-900/40">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-ice-950/80 border border-ice-400/30 rounded-lg text-ice-400 shadow-neon-blue animate-pulse">
+                        <i data-lucide="cloud-cold"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold tracking-widest text-white flex items-center gap-2">
+                            寒域觀測 <span class="text-xs bg-ice-500/20 text-ice-300 px-2 py-0.5 border border-ice-500/30 rounded">TAIWAN-W_v1.0.4</span>
+                        </h1>
+                        <p class="text-[10px] text-ice-400 tracking-wider uppercase">High School Term Project</p>
+                    </div>
+                </div>
+                <nav class="flex items-center gap-6 text-sm text-ice-300">
+                    <a href="#intro" class="hover:text-ice-400 transition-colors flex items-center gap-1.5"><i data-lucide="info" class="w-4 h-4"></i>專題介紹</a>
+                    <a href="#monitor" class="hover:text-ice-400 transition-colors flex items-center gap-1.5"><i data-lucide="gauge" class="w-4 h-4"></i>觀測面板</a>
+                    <a href="#structure" class="hover:text-ice-400 transition-colors flex items-center gap-1.5"><i data-lucide="git-branch" class="w-4 h-4"></i>系統架構</a>
+                    <a href="#executable" class="bg-ice-950/80 border border-ice-400/40 px-4 py-1.5 rounded text-ice-300 hover:text-white hover:border-ice-300 hover:shadow-neon-blue transition-all duration-300 flex items-center gap-2"><i data-lucide="terminal" class="w-4 h-4"></i>執行檔控制台</a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- 主要內容區 -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-grow space-y-12">
+            
+            <!-- 英雄看板 / 模擬終端 -->
+            <section id="hero" class="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-4">
+                
+                <!-- 左側：終端機互動（極致冰冷風） -->
+                <div class="lg:col-span-7 glass-panel rounded-2xl p-6 flex flex-col justify-between shadow-neon-glow min-h-[400px]">
+                    <div class="space-y-4">
+                        <!-- 視窗控制按鈕 -->
+                        <div class="flex justify-between items-center border-b border-ice-900/50 pb-3">
+                            <div class="flex gap-2">
+                                <span class="w-3 h-3 rounded-full bg-red-950 border border-red-500/50"></span>
+                                <span class="w-3 h-3 rounded-full bg-yellow-950 border border-yellow-500/50"></span>
+                                <span class="w-3 h-3 rounded-full bg-green-950 border border-green-500/50"></span>
+                            </div>
+                            <span class="text-xs text-ice-500 font-mono">user@cold-observation-node: ~</span>
+                            <div class="text-xs text-ice-400 bg-ice-950/80 border border-ice-900 px-2 py-0.5 rounded">ONLINE</div>
+                        </div>
+
+                        <!-- 終端文字區 -->
+                        <div class="font-mono text-sm space-y-3 text-ice-200" id="terminal-content">
+                            <p class="text-ice-500">[SYSTEM INITIATION SUCCESSFUL]</p>
+                            <p class="text-ice-400">&gt; Loading Taiwan Meteorological Database...</p>
+                            <p class="text-ice-400">&gt; Status: <span class="text-blue-400">Frost Mode Active</span> | Ambient: Rain simulation enabled.</p>
+                            <p class="text-ice-300">&gt; 專題名稱：台灣氣象數據低溫微縮可視化系統</p>
+                            <p class="text-ice-300">&gt; 研發人員：某某高中 - 資訊科技期末專題組</p>
+                            <div class="border-l-2 border-ice-400/50 pl-3 my-4 py-1 text-xs text-ice-400 bg-ice-950/40">
+                                "在冰冷的科技浪潮下，我們重新詮釋天氣預報。本系統致力於將台灣劇烈降雨與寒流數據，以最純粹、不帶溫度的視覺形式呈現給使用者。"
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 專案執行檔按鈕與觸發狀態 -->
+                    <div class="mt-6 pt-4 border-t border-ice-900/50 flex flex-col sm:flex-row gap-4 items-center">
+                        <button id="runProjectBtn" class="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-ice-950 to-ice-900 border border-ice-400/50 text-ice-200 font-mono font-bold tracking-wider rounded-xl shadow-lg hover:border-ice-300 hover:text-white hover:shadow-neon-blue active:scale-95 transition-all duration-300 flex items-center justify-center gap-3">
+                            <i data-lucide="play-circle" class="text-ice-400"></i>
+                            RUN_OBSERVATION.EXE
+                        </button>
+                        <div class="text-xs text-ice-400 font-mono text-center sm:text-left">
+                            <span class="text-ice-500">提示：</span>點擊執行檔按鈕模擬加載本地端專案核心組件。
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：即時微型天氣狀態 -->
+                <div class="lg:col-span-5 flex flex-col justify-between gap-6">
+                    <div class="glass-panel rounded-2xl p-6 flex-grow flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-6">
+                                <div>
+                                    <h3 class="text-xs uppercase tracking-widest text-ice-400">首頁氣候指標</h3>
+                                    <p class="text-2xl font-black text-white mt-1">台北冷區監測</p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-xs bg-blue-950/80 border border-blue-500/30 text-blue-300 px-2 py-1 rounded">強降雨防護</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-6 my-4">
+                                <div class="text-5xl font-extrabold text-white tracking-tighter" id="hero-temp">15.4°C</div>
+                                <div class="text-ice-300 flex flex-col">
+                                    <span class="text-xs text-ice-400">目前天氣</span>
+                                    <span class="font-bold flex items-center gap-1"><i data-lucide="cloud-rain" class="w-4 h-4 text-blue-400"></i> 強陣雨 (Heavy Rain)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 pt-4 border-t border-ice-900/50">
+                            <div class="bg-ice-950/50 border border-ice-900 p-3 rounded-lg">
+                                <p class="text-[10px] text-ice-400">降雨機率</p>
+                                <p class="text-lg font-bold text-ice-200">92%</p>
+                            </div>
+                            <div class="bg-ice-950/50 border border-ice-900 p-3 rounded-lg">
+                                <p class="text-[10px] text-ice-400">平均風速</p>
+                                <p class="text-lg font-bold text-ice-200">14.2 m/s</p>
+                            </div>
+                            <div class="bg-ice-950/50 border border-ice-900 p-3 rounded-lg">
+                                <p class="text-[10px] text-ice-400">濕度值</p>
+                                <p class="text-lg font-bold text-ice-200">88%</p>
+                            </div>
+                            <div class="bg-ice-950/50 border border-ice-900 p-3 rounded-lg">
+                                <p class="text-[10px] text-ice-400">環境氣壓</p>
+                                <p class="text-lg font-bold text-ice-200">1012 hPa</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 專題介紹 -->
+            <section id="intro" class="scroll-mt-24 space-y-6">
+                <div class="border-l-4 border-ice-400 pl-4">
+                    <h2 class="text-2xl font-bold tracking-widest text-white">專題研究介紹 / INTRODUCTION</h2>
+                    <p class="text-xs text-ice-400 uppercase">Taiwan Weather Forecast Project Document</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="glass-panel p-6 rounded-2xl space-y-4 hover:border-ice-400/40 transition-all duration-300">
+                        <div class="w-10 h-10 rounded-xl bg-ice-950 flex items-center justify-center text-ice-400 border border-ice-500/30">
+                            <i data-lucide="compass"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-white">1. 研究動機與目的</h3>
+                        <p class="text-sm text-ice-300 leading-relaxed">
+                            台灣地處亞熱帶，季風與颱風帶來劇烈降雨，近年極端氣候頻發。本專案由高中資訊科技課程出發，旨在透過 **HTML5 Canvas 動態物理引擎技術** 與 **JSON 即時數據解析**，將極端低溫與強降雨以具科技美感的「冷調、冰冷風格」進行動態呈現，打破傳統氣象播報的沈悶感，提升青年學子對於地學數據的敏感度。
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl space-y-4 hover:border-ice-400/40 transition-all duration-300">
+                        <div class="w-10 h-10 rounded-xl bg-ice-950 flex items-center justify-center text-ice-400 border border-ice-500/30">
+                            <i data-lucide="code-2"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-white">2. 核心技術應用</h3>
+                        <p class="text-sm text-ice-300 leading-relaxed">
+                            系統以前端核心技術打造：**Canvas API** 用於繪製即時物理下落雨滴與衝擊地表濺射的粒子特效；**Tailwind CSS** 構築高冷系毛玻璃微縮介面；**JavaScript ES6+** 實作非同步數據模擬更新與控制台交互，並搭配響應式設計，確保在平板與行動裝置上皆能展現極佳的科技視覺感。
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl space-y-4 hover:border-ice-400/40 transition-all duration-300">
+                        <div class="w-10 h-10 rounded-xl bg-ice-950 flex items-center justify-center text-ice-400 border border-ice-500/30">
+                            <i data-lucide="check-square"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-white">3. 研究結論與預期成果</h3>
+                        <p class="text-sm text-ice-300 leading-relaxed">
+                            本專案成功實現了將「枯燥的氣象代碼」轉換成「具備未來感的可視化儀表板」。經實驗測試，冷色系（#0ea5e9 與暗灰色調）能有效降低使用者閱讀高負載數據時的焦慮感，未來可進一步接入台灣中央氣象署的 OPEN API 即時數據庫，朝向全自動化即時天氣預警儀表板的方向拓展。
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 系統架構 -->
+            <section id="structure" class="scroll-mt-24 glass-panel p-8 rounded-2xl space-y-6">
+                <div class="border-l-4 border-ice-400 pl-4">
+                    <h2 class="text-xl font-bold tracking-widest text-white">系統架構與實作邏輯 / SYSTEM ARCHITECTURE</h2>
+                    <p class="text-xs text-ice-400">How It Works - System Data Flow</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    <div class="lg:col-span-5 space-y-4 text-sm text-ice-300">
+                        <p>我們將整個天氣監控專案拆解為四大核心層，這奠定了系統的冰冷美學基礎：</p>
+                        <ul class="space-y-3">
+                            <li class="flex items-start gap-2">
+                                <span class="bg-ice-500/20 text-ice-300 px-1.5 py-0.5 rounded font-mono text-xs mt-0.5">01</span>
+                                <div><strong>物理降雨渲染引擎 (Canvas Physics Engine)</strong><br><span class="text-xs text-ice-400">利用 requestAnimationFrame 驅動的高幀率雨水粒子動畫。</span></div>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="bg-ice-500/20 text-ice-300 px-1.5 py-0.5 rounded font-mono text-xs mt-0.5">02</span>
+                                <div><strong>微縮數據調度器 (Data Dispatcher)</strong><br><span class="text-xs text-ice-400">模擬台灣各地氣候測站的反饋機制，並維持定時刷新的動態特徵。</span></div>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="bg-ice-500/20 text-ice-300 px-1.5 py-0.5 rounded font-mono text-xs mt-0.5">03</span>
+                                <div><strong>冰冷交互介面層 (Frost UI Layer)</strong><br><span class="text-xs text-ice-400">基於冷灰、冰藍與半透明亞克力效果構成的無邊框儀表板。</span></div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="lg:col-span-7 bg-ice-950/60 border border-ice-900/80 p-6 rounded-xl font-mono text-xs text-ice-300 overflow-x-auto space-y-2">
+                        <div class="text-ice-500">// 系統架構簡圖簡化版 (ASCII Layer Plan)</div>
+                        <div>+-------------------------------------------------------------------------+</div>
+                        <div>|                        [ 瀏覽器客戶端介面渲染 ]                         |</div>
+                        <div>|      +---------------------+               +---------------------+      |</div>
+                        <div>|      |   Canvas 背景雨水   |               |   Glass-Panel UI    |      |</div>
+                        <div>|      |   (2D Physics)      |               |   (Tailwind Core)   |      |</div>
+                        <div>|      +----------+----------+               +----------+----------+      |</div>
+                        <div>+-----------------|-------------------------------------|-----------------+</div>
+                        <div>                  | 物理碰撞觸發                         | 數據綁定渲染</div>
+                        <div>                  v                                     v</div>
+                        <div>+-------------------------------------------------------------------------+</div>
+                        <div>|                     [ 專案執行核心：JS Control Engine ]                 |</div>
+                        <div>|   * RainManager.js (粒子生命週期控制)                                   |</div>
+                        <div>|   * WeatherFetcher.js (模擬台灣氣候觀測站數據)                           |</div>
+                        <div>+-------------------------------------------------------------------------+</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 即時觀測面板 -->
+            <section id="monitor" class="scroll-mt-24 space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                    <div class="border-l-4 border-ice-400 pl-4">
+                        <h2 class="text-2xl font-bold tracking-widest text-white">臺灣主要觀測站 / REGIONAL MONITORING</h2>
+                        <p class="text-xs text-ice-400 uppercase">Taiwan Weather Regional Live Observation</p>
+                    </div>
+                    <div class="text-xs text-ice-400 font-mono">
+                        系統每 10 秒自動更新觀測值 | 狀態：<span class="text-green-400 animate-pulse">● 觀測中</span>
+                    </div>
+                </div>
+
+                <!-- 縣市卡片 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="cities-container">
+                    <!-- 台北市 (模擬冷氣團) -->
+                    <div class="glass-panel rounded-2xl p-5 hover:glass-panel-active transition-all duration-300 space-y-4 group">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold tracking-wider text-ice-100 group-hover:text-ice-300">基隆 / 台北 (TL-01)</span>
+                            <span class="text-[10px] bg-blue-950 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">強降雨</span>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div class="text-3xl font-extrabold text-white" id="city-temp-taipei">15.4°C</div>
+                            <div class="text-xs text-ice-300 flex items-center gap-1"><i data-lucide="cloud-rain" class="w-4 h-4 text-blue-400"></i> 雨天</div>
+                        </div>
+                        <div class="space-y-1 text-xs text-ice-400 pt-3 border-t border-ice-900/50">
+                            <div class="flex justify-between"><span>風速</span><span id="city-wind-taipei">14.2 m/s</span></div>
+                            <div class="flex justify-between"><span>濕度</span><span id="city-humidity-taipei">88%</span></div>
+                            <div class="flex justify-between"><span>降雨機率</span><span>90%</span></div>
+                        </div>
+                    </div>
+
+                    <!-- 台中市 -->
+                    <div class="glass-panel rounded-2xl p-5 hover:glass-panel-active transition-all duration-300 space-y-4 group">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold tracking-wider text-ice-100 group-hover:text-ice-300">台中測站 (TL-02)</span>
+                            <span class="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded">陰天</span>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div class="text-3xl font-extrabold text-white" id="city-temp-taichung">18.1°C</div>
+                            <div class="text-xs text-ice-300 flex items-center gap-1"><i data-lucide="cloud" class="w-4 h-4 text-cyan-400"></i> 多雲</div>
+                        </div>
+                        <div class="space-y-1 text-xs text-ice-400 pt-3 border-t border-ice-900/50">
+                            <div class="flex justify-between"><span>風速</span><span id="city-wind-taichung">6.4 m/s</span></div>
+                            <div class="flex justify-between"><span>濕度</span><span id="city-humidity-taichung">72%</span></div>
+                            <div class="flex justify-between"><span>降雨機率</span><span>20%</span></div>
+                        </div>
+                    </div>
+
+                    <!-- 高雄市 -->
+                    <div class="glass-panel rounded-2xl p-5 hover:glass-panel-active transition-all duration-300 space-y-4 group">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold tracking-wider text-ice-100 group-hover:text-ice-300">高雄測站 (TL-03)</span>
+                            <span class="text-[10px] bg-slate-950 text-slate-400 border border-slate-800 px-2 py-0.5 rounded">風大</span>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div class="text-3xl font-extrabold text-white" id="city-temp-kaohsiung">21.5°C</div>
+                            <div class="text-xs text-ice-300 flex items-center gap-1"><i data-lucide="wind" class="w-4 h-4 text-slate-300"></i> 陣風</div>
+                        </div>
+                        <div class="space-y-1 text-xs text-ice-400 pt-3 border-t border-ice-900/50">
+                            <div class="flex justify-between"><span>風速</span><span id="city-wind-kaohsiung">11.8 m/s</span></div>
+                            <div class="flex justify-between"><span>濕度</span><span id="city-humidity-kaohsiung">65%</span></div>
+                            <div class="flex justify-between"><span>降雨機率</span><span>10%</span></div>
+                        </div>
+                    </div>
+
+                    <!-- 花蓮市 -->
+                    <div class="glass-panel rounded-2xl p-5 hover:glass-panel-active transition-all duration-300 space-y-4 group">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold tracking-wider text-ice-100 group-hover:text-ice-300">花蓮/宜蘭 (TL-04)</span>
+                            <span class="text-[10px] bg-blue-950 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">大雨</span>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div class="text-3xl font-extrabold text-white" id="city-temp-hualien">16.8°C</div>
+                            <div class="text-xs text-ice-300 flex items-center gap-1"><i data-lucide="cloud-lightning" class="w-4 h-4 text-blue-300"></i> 陣雨</div>
+                        </div>
+                        <div class="space-y-1 text-xs text-ice-400 pt-3 border-t border-ice-900/50">
+                            <div class="flex justify-between"><span>風速</span><span id="city-wind-hualien">9.2 m/s</span></div>
+                            <div class="flex justify-between"><span>濕度</span><span id="city-humidity-hualien">85%</span></div>
+                            <div class="flex justify-between"><span>降雨機率</span><span>80%</span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 專案執行檔模擬展示控制台 -->
+            <section id="executable" class="scroll-mt-24 glass-panel rounded-2xl overflow-hidden border border-ice-500/30">
+                <div class="bg-gradient-to-r from-ice-950 to-coldgray-950 px-6 py-4 border-b border-ice-900/60 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="terminal" class="text-ice-400 animate-pulse"></i>
+                        <span class="font-mono text-sm font-bold text-white tracking-widest">PROJECT_TERMINAL_EMULATOR.SH</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping"></span>
+                        <span class="text-xs font-mono text-green-400">READY TO INITIALIZE</span>
+                    </div>
+                </div>
+
+                <div class="p-6 bg-coldgray-950/90 font-mono text-xs text-ice-300 space-y-4 min-h-[300px] flex flex-col justify-between">
+                    <div class="space-y-2 max-h-[250px] overflow-y-auto" id="terminal-screen">
+                        <p class="text-ice-500">&gt;&gt; Welcome to Taiwan Weather Forecast Terminal Emulator.</p>
+                        <p class="text-ice-500">&gt;&gt; Use the control button below to compile and execute the desktop visualization package.</p>
+                        <p class="text-ice-400">[SYSTEM] All components loaded. Waiting for trigger...</p>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-4 justify-between items-center border-t border-ice-900/60 pt-4">
+                        <div class="text-ice-400 text-[11px] text-center sm:text-left">
+                            本面板提供虛擬的 C++ 氣象解算終端編譯器與本地執行模擬，點擊後觸發程序。
+                        </div>
+                        <div class="flex gap-2 w-full sm:w-auto">
+                            <button id="clearTerminalBtn" class="flex-1 sm:flex-none px-4 py-2 border border-ice-900 hover:border-ice-500 text-ice-400 hover:text-white rounded font-bold transition-all text-center">
+                                清除終端
+                            </button>
+                            <button id="executeProjectBtn" class="flex-1 sm:flex-none px-6 py-2 bg-ice-500/20 border border-ice-400 text-ice-100 hover:bg-ice-500/40 hover:text-white rounded font-bold shadow-neon-blue transition-all flex items-center justify-center gap-2">
+                                <i data-lucide="play" class="w-4 h-4"></i>
+                                模擬專案執行
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- 頁尾 -->
+        <footer class="glass-panel border-t border-ice-900/50 py-8 px-6 mt-16 text-center text-xs text-ice-400">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="space-y-1 text-left">
+                    <p class="font-bold text-ice-300">國立高中 115學年度 資訊科技課程期末專題</p>
+                    <p class="text-[10px]">指導老師：張元龍 | 組員：林睿恩、陳宇航、沈佳璇</p>
+                </div>
+                <div class="text-right text-[10px] space-y-1">
+                    <p>TAIWAN WEATHER DATA VISUALIZATION SYSTEMS</p>
+                    <p class="text-ice-500">© 2026 Ice Observation Lab. Powered by Canvas and Web Tech.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 自訂訊息對話盒 -->
+    <div id="customModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl border border-ice-400 shadow-neon-blue m-4">
+            <div class="flex items-center gap-3 text-ice-400 mb-4">
+                <i data-lucide="terminal" class="w-6 h-6 animate-bounce"></i>
+                <h3 class="text-lg font-bold tracking-widest text-white font-mono" id="modalTitle">系統提示</h3>
+            </div>
+            <p class="text-sm text-ice-200 leading-relaxed font-mono" id="modalMessage">正在執行天氣監測專案...</p>
+            <div class="mt-6 flex justify-end">
+                <button id="closeModalBtn" class="px-6 py-2 bg-ice-950 border border-ice-400/50 text-ice-200 hover:text-white rounded-lg hover:shadow-neon-blue transition-all duration-300 text-sm font-mono">
+                    CLOSE_SYSTEM
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Lucide 圖標
+        lucide.createIcons();
+
+        // -------------------------
+        // Canvas 雨天特效背景引擎
+        // -------------------------
+        const canvas = document.getElementById('rainCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        // 監聽視窗縮放
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        });
+
+        // 雨滴陣列與濺水粒子陣列
+        const rainDrops = [];
+        const splashes = [];
+
+        // 雨滴類別
+        class RainDrop {
+            constructor() {
+                this.reset();
+                this.y = Math.random() * height; // 初始隨機高度避免一開始頂部出現一排雨
+            }
+
+            reset() {
+                this.x = Math.random() * width;
+                this.y = -20;
+                this.length = Math.random() * 20 + 20; // 雨滴長度
+                this.speed = Math.random() * 15 + 15;  // 降落速度
+                this.opacity = Math.random() * 0.25 + 0.15; // 淡淡的科技透明感
+                this.angle = -0.15; // 向左微斜傾瀉的風向效果
+            }
+
+            update() {
+                this.y += this.speed;
+                this.x += this.angle * this.speed;
+
+                // 若落至地表/視窗邊緣
+                if (this.y >= height - 20) {
+                    // 隨機機率產生濺水效果
+                    if (Math.random() > 0.45) {
+                        createSplash(this.x, height - 10);
+                    }
+                    this.reset();
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(186, 230, 253, ${this.opacity})`;
+                ctx.lineWidth = 1;
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x + this.angle * this.length, this.y + this.length);
+                ctx.stroke();
+            }
+        }
+
+        // 濺水粒子類別
+        class Splash {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 4; // 水平濺射速度
+                this.vy = -Math.random() * 4 - 2;   // 垂直向上速度
+                this.gravity = 0.2;
+                this.alpha = 1;
+                this.size = Math.random() * 1 + 0.5;
+            }
+
+            update() {
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= 0.04;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.fillStyle = `rgba(186, 230, 253, ${this.alpha})`;
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // 建立濺水效果
+        function createSplash(x, y) {
+            const count = Math.random() * 3 + 2;
+            for (let i = 0; i < count; i++) {
+                splashes.push(new Splash(x, y));
+            }
+        }
+
+        // 初始化雨滴
+        const dropCount = 120;
+        for (let i = 0; i < dropCount; i++) {
+            rainDrops.push(new RainDrop());
+        }
+
+        // 動態渲染迴圈
+        function animate() {
+            // 背景使用冷灰色微透明複寫，產生漂亮的拖尾(Motion blur)效果
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.15)';
+            ctx.fillRect(0, 0, width, height);
+
+            // 渲染與更新雨滴
+            rainDrops.forEach(drop => {
+                drop.update();
+                drop.draw();
+            });
+
+            // 渲染與更新濺水粒子
+            for (let i = splashes.length - 1; i >= 0; i--) {
+                const splash = splashes[i];
+                splash.update();
+                if (splash.alpha <= 0) {
+                    splashes.splice(i, 1);
+                } else {
+                    splash.draw();
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // 等待DOM就緒後啟動背景
+        window.onload = function() {
+            animate();
+        }
+
+        // -------------------------
+        // 天氣數據模擬與即時更新
+        // -------------------------
+        const cities = {
+            taipei: { tempId: 'city-temp-taipei', windId: 'city-wind-taipei', humId: 'city-humidity-taipei', baseTemp: 15.0 },
+            taichung: { tempId: 'city-temp-taichung', windId: 'city-wind-taichung', humId: 'city-humidity-taichung', baseTemp: 18.0 },
+            kaohsiung: { tempId: 'city-temp-kaohsiung', windId: 'city-wind-kaohsiung', humId: 'city-humidity-kaohsiung', baseTemp: 21.0 },
+            hualien: { tempId: 'city-temp-hualien', windId: 'city-wind-hualien', humId: 'city-humidity-hualien', baseTemp: 16.5 }
+        };
+
+        function updateWeatherStats() {
+            // 對每個測站隨機浮動數據，營造科技儀表板更新實感
+            for (let key in cities) {
+                const city = cities[key];
+                const deltaTemp = (Math.random() - 0.5) * 0.8;
+                const newTemp = (city.baseTemp + deltaTemp).toFixed(1);
+                const newWind = (Math.random() * 5 + (key === 'taipei' ? 10 : 5)).toFixed(1);
+                const newHum = Math.floor(Math.random() * 10 + 70);
+
+                document.getElementById(city.tempId).innerText = `${newTemp}°C`;
+                document.getElementById(city.windId).innerText = `${newWind} m/s`;
+                document.getElementById(city.humId).innerText = `${newHum}%`;
+
+                // 同步首頁大溫度計
+                if (key === 'taipei') {
+                    document.getElementById('hero-temp').innerText = `${newTemp}°C`;
+                }
+            }
+        }
+
+        // 每隔10秒動態變更
+        setInterval(updateWeatherStats, 10000);
+
+
+        // -------------------------
+        // 專案執行檔與終端機模擬控制
+        // -------------------------
+        const terminalScreen = document.getElementById('terminal-screen');
+        const terminalContent = document.getElementById('terminal-content');
+        const customModal = document.getElementById('customModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+
+        // 自訂系統彈出視窗顯示與關閉
+        function showModal(title, msg) {
+            modalTitle.innerText = title;
+            modalMessage.innerHTML = msg;
+            customModal.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            customModal.classList.add('opacity-0', 'pointer-events-none');
+        });
+
+        // 終端機日誌添加函數
+        function addLog(text, type = 'info') {
+            const p = document.createElement('p');
+            const time = new Date().toLocaleTimeString();
+            
+            if (type === 'success') {
+                p.className = 'text-green-400';
+                p.innerHTML = `[${time}] SUCCESS: ${text}`;
+            } else if (type === 'error') {
+                p.className = 'text-red-400';
+                p.innerHTML = `[${time}] ERROR: ${text}`;
+            } else if (type === 'warning') {
+                p.className = 'text-yellow-400';
+                p.innerHTML = `[${time}] WARNING: ${text}`;
+            } else {
+                p.className = 'text-ice-300';
+                p.innerHTML = `[${time}] ${text}`;
+            }
+            terminalScreen.appendChild(p);
+            // 自動滾動到底部
+            terminalScreen.scrollTop = terminalScreen.scrollHeight;
+        }
+
+        // 模擬執行核心邏輯
+        function triggerObservationApp() {
+            // 清理與重新渲染首頁終端顯示
+            terminalContent.innerHTML = `
+                <p class="text-green-400">[RUNNING OBSERVATION.EXE]</p>
+                <p class="text-ice-300">&gt; Loading terminal resources...</p>
+                <p class="text-ice-300">&gt; Building FrostEngine v2.10 (Linux/WebGL)</p>
+                <p class="text-ice-400">&gt; Fetching observation array: SUCCESS</p>
+                <div class="p-2 bg-ice-950/90 border border-ice-400 text-xs font-mono text-cyan-300">
+                    系統反饋：已與台灣四處核心氣象監測點重新建立即時串流連結。正在模擬本地 C++ 背景解算。
+                </div>
+            `;
+
+            // 底部終端紀錄
+            addLog("Executing run_observation.exe", "info");
+            addLog("Checking compilers... g++ v11.2.0 found.", "info");
+            addLog("Linking libraries: -lSfmlWindow -lSfmlGraphics -lCanvas2D", "info");
+            
+            setTimeout(() => {
+                addLog("Injecting mock thread 0x7FFF8E92B", "info");
+            }, 500);
+
+            setTimeout(() => {
+                addLog("Taiwan Meteorological Map compiled successfully in 124ms.", "success");
+                addLog("Local server started at http://localhost:8080", "success");
+                
+                showModal(
+                    "PROCESS_RUN_COMPLETE", 
+                    "<strong>[寒域觀測：專案執行檔已順利模擬啟動]</strong><br><br>這是一個模擬的高中專案可執行檔（C++ / WebGL 架構）。在實體專題中，本功能會讀取本地數據並渲染出獨立的精美台灣氣候雷達介面。<br><br><span class='text-ice-400 text-xs'>狀態碼：Exit Code 0 (Success)</span>"
+                );
+            }, 1200);
+        }
+
+        // 綁定按鈕
+        document.getElementById('runProjectBtn').addEventListener('click', triggerObservationApp);
+        document.getElementById('executeProjectBtn').addEventListener('click', triggerObservationApp);
+
+        document.getElementById('clearTerminalBtn').addEventListener('click', () => {
+            terminalScreen.innerHTML = `<p class="text-ice-500">&gt;&gt; Terminal cleared. Awaiting executable instructions.</p>`;
+            addLog("Console log cleared by user.", "warning");
+        });
+
+    </script>
+</body>
+</html>
